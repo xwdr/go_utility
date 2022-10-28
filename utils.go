@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -106,7 +107,7 @@ func StringToTime(timeLayout, strTime string) time.Time {
 	return t
 }
 
-// 根据tagName的值做可以将struct转map
+// StructToMapByTagName 根据tagName的值做可以将struct转map
 func StructToMapByTagName(obj interface{}, tagName string) map[string]interface{} {
 	t := reflect.TypeOf(obj)
 	v := reflect.ValueOf(obj)
@@ -217,16 +218,71 @@ func InArray(needle interface{}, haystack interface{}) bool {
 	return false
 }
 
-// MergeMap 两个map合并
-func MergeMap(m1 map[string]interface{}, m2 map[string]interface{}) map[string]interface{} {
-	if m1 == nil {
-		return m2
+// Strcat 字符串拼接
+func Strcat(strs ...string) string {
+	var builder strings.Builder
+	for _, str := range strs {
+		builder.WriteString(str)
 	}
-	if m2 == nil {
-		return m1
+	return builder.String()
+}
+
+// MergeMap map合并
+func MergeMap(mList ...map[int]interface{}) map[int]interface{} {
+	mResult := make(map[int]interface{})
+	if len(mList) == 0 {
+		return mResult
 	}
-	for k, v := range m2 {
-		m1[k] = v
+	for _, m := range mList {
+		for k, v := range m {
+			mResult[k] = v
+		}
 	}
-	return m1
+	return mResult
+}
+
+// If 三木运算
+func If(cond bool, v1, v2 interface{}) interface{} {
+	if cond {
+		return v1
+	}
+	return v2
+}
+
+// RemoveHtml 移除html标签
+func RemoveHtml(detail string) string {
+	// 将HTML标签全转换成小写
+	re, _ := regexp.Compile("\\<[\\S\\s]+?\\>")
+	detail = re.ReplaceAllStringFunc(detail, strings.ToLower)
+	// 去除STYLE
+	re, _ = regexp.Compile("\\<style[\\S\\s]+?\\</style\\>")
+	detail = re.ReplaceAllString(detail, "")
+	// 去除SCRIPT
+	re, _ = regexp.Compile("\\<script[\\S\\s]+?\\</script\\>")
+	detail = re.ReplaceAllString(detail, "")
+	// 去除所有尖括号内的HTML代码，并换成换行符
+	re, _ = regexp.Compile("\\<[\\S\\s]+?\\>")
+	detail = re.ReplaceAllString(detail, "")
+	// 去除连续的换行符
+	re, _ = regexp.Compile("\\s{2,}")
+	detail = re.ReplaceAllString(detail, "")
+
+	// 替换一些字符
+	itemTags := map[string]string{
+		"&nbsp;": " ",
+		"&apos;": "'",
+		"&quot;": "\"",
+		"&amp;":  "&",
+		"&gt;":   ">",
+		"&lt;":   "<",
+	}
+	for k, v := range itemTags {
+		detail = strings.Replace(detail, k, v, -1)
+	}
+
+	// 移除首尾换行、空格
+	detail = strings.Trim(detail, "\n")
+	detail = strings.Trim(detail, " ")
+
+	return strings.TrimSpace(detail)
 }
