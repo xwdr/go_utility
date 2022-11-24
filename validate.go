@@ -8,10 +8,15 @@ import (
 	"strings"
 )
 
-// 规则Rules
-type Rules map[string][]string
+// 	Rule 规则信息,包括规则和、错误提示
+type Rule struct {
+	Condition string `json:"condition"` // 条件
+	Tip       string `json:"tip"`       // 提示
+}
 
-// 自定义规则注册
+// 规则Rules
+type Rules map[string][]*Rule
+
 var CustomizeMap = make(map[string]Rules)
 
 // compareMap 校验规则
@@ -55,7 +60,7 @@ func RegisterRule(key string, rule Rules) (err error) {
 }
 
 // Validate 校验方法
-func Validate(st interface{}, roleMap Rules) (err error) {
+func Validate(st interface{}, roleMap Rules) error {
 	typ := reflect.TypeOf(st)
 	val := reflect.ValueOf(st) // 获取reflect.Type类型
 
@@ -70,31 +75,45 @@ func Validate(st interface{}, roleMap Rules) (err error) {
 		if len(roleMap[name]) == 0 {
 			continue
 		}
-		for _, v := range roleMap[name] {
-			switch {
-			case v == "notEmpty":
-				if isBlank(val) {
-					return errors.New(name + "值不能为空")
-				}
-			case strings.Split(v, "=")[0] == "regexp":
-				if !regexpMatch(strings.Split(v, "=")[1], val.String()) {
-					return errors.New(name + "格式校验不通过")
-				}
-			case compareMap[strings.Split(v, "=")[0]]:
-				if !compareVerify(val, v) {
-					return errors.New(name + "长度或值不在合法范围," + v)
-				}
+		// 校验参数表规则
+		for _, rule := range roleMap[name] {
+			if err := execRule(val, name, rule); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
+// execRule 执行规则
+func execRule(val reflect.Value, name string, rule *Rule) error {
+	switch {
+	case rule.Condition == "notEmpty":
+		if isBlank(val) {
+			return msgTip(errors.New(name+"值不能为空"), rule)
+		}
+	case strings.Split(rule.Condition, "=")[0] == "regexp":
+		if !regexpMatch(strings.Split(rule.Condition, "=")[1], val.String()) {
+			return msgTip(errors.New(name+"格式校验不通过"), rule)
+		}
+	case compareMap[strings.Split(rule.Condition, "=")[0]]:
+		if !compareVerify(val, rule.Condition) {
+			return msgTip(errors.New(name+"长度或值不在合法范围"), rule)
+		}
+	}
+	return nil
+}
+
+// msgTip 消息提示
+func msgTip(orgErr error, rule *Rule) error {
+	return If(len(rule.Tip) == 0, orgErr, errors.New(rule.Tip)).(error)
+}
+
 // compareVerify 长度和数字的校验方法 根据类型自动校验
 func compareVerify(value reflect.Value, VerifyStr string) bool {
 	switch value.Kind() {
 	case reflect.String:
-		return compare(len([]rune(value.String())), VerifyStr)
+		return compare(value.String(), VerifyStr)
 	case reflect.Slice, reflect.Array:
 		return compare(value.Len(), VerifyStr)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -195,6 +214,8 @@ func compare(value interface{}, VerifyStr string) bool {
 		default:
 			return false
 		}
+	case reflect.String:
+		return VerifyStrArr[1] == value
 	default:
 		return false
 	}
